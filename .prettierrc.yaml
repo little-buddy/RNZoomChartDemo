@@ -1,0 +1,9 @@
+tabWidth: 2 # 缩进
+useTabs: true # 使用tab
+semi: true # 使用分号
+singleQuote: true # 使用单引号
+trailingComma: "es5" # 行尾短号
+bracketSpacing: true # 对象中的空格
+jsxBracketSameLine: false
+arrowParens: "always"
+
