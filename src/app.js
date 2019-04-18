@@ -6,15 +6,20 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import ZoomChart from './component/zoomChart';
 
-export default class App extends React.Component {
-	render() {
-		return (
-			<View style={styles.container}>
-				<ZoomChart />
-			</View>
-		);
-	}
-}
+/* App */
+export default () => {
+	return (
+		<View style={styles.container}>
+			<ZoomChart />
+		</View>
+	);
+};
+
+/*
+		<StoreContext.Provider value={store}>
+				{childrend}
+		</StoreContext.Provider>
+* * */
 
 const styles = StyleSheet.create({
 	container: {

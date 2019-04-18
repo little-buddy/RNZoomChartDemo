@@ -2,7 +2,7 @@
  * Created by buddy on 2019/3/24.
  */
 
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Text } from 'react-native';
 import {
 	VictoryChart,
@@ -34,132 +34,128 @@ import _ from 'lodash';
   }
 * * */
 
-export default class ZoomChart extends React.Component {
-	static defaultProps = {
-		lineColor: '#c43a31',
-		lineStroke: 2,
-		minimumZoom: { x: 5, y: 1 },
-	};
-	state = {
-		bootstrap: false,
-	};
+/* 加油。你会成为一个很好的[ 说谎 ]者 */
 
-	async componentDidMount() {
-		const { data } = await API.getZoomChartData();
-		this._data = data;
-		this.locationX = 0;
-		this.setState({ bootstrap: data });
+type Point = { x: number, y: number };
+
+const getDomain = (
+	data,
+	minimumZoom: Point
+): {
+	xDomain: Point,
+	yDomain: Point,
+} => {
+	let xDomain;
+	let yDomain;
+	if (data.length === 0) {
+		xDomain = [0, 1440];
+		yDomain = [60, 200];
+	} else if (data.length === 1) {
+		const [{ x, y }] = data;
+		xDomain = [x - minimumZoom.x, x + minimumZoom.x];
+		yDomain = [y - minimumZoom.y, y + minimumZoom.y];
+	} else {
+		const start = data[0];
+		const end = data[data.length - 1];
+		xDomain = [start.x, end.x];
+		yDomain = Utils.getDomainY(data.map(({ y }) => y));
 	}
 
-	getDomain = (data, minimumZoom) => {
-		let xDomain;
-		let yDomain;
-		if (data.length === 0) {
-			xDomain = [0, 1440];
-			yDomain = [60, 200];
-		} else if (data.length === 1) {
-			const [{ x, y }] = data;
-			xDomain = [x - minimumZoom.x, x + minimumZoom.x];
-			yDomain = [y - minimumZoom.y, y + minimumZoom.y];
-		} else {
-			const start = data[0];
-			const end = data[data.length - 1];
-			xDomain = [start.x, end.x];
-			yDomain = Utils.getDomainY(data.map(({ y }) => y));
-		}
-
-		return {
-			xDomain,
-			yDomain,
-		};
+	return {
+		xDomain,
+		yDomain,
 	};
+};
 
-	handleDomainChange = (domain, props) => {
-		this._domain = domain.x;
-	};
+// 总体变量值
+let _data = [];
+let _domain = [];
 
-	// TODO 根据作用域 显示不同的值
-	_tickValues = () => {
-		const x = this._domain[1] - this._domain[0];
-		const count = Math.ceil(x / 60);
-		if (count > 12) {
-			return _.range(0, 1441, 120);
-		} else if (count > 6) {
-			return _.range(0, 1441, 60);
-		} else if (x < 40) {
-			let [start, end] = this._domain;
-			start += 5 - (start % 5);
-			return _.range(start, end + 1, 5);
-		}
-		return undefined;
-	};
+// TODO 根据作用域 生成不同的格式函数
+const _xTickFormat = (value, index, data) => {
+	if (Math.floor(value) !== value) {
+		return '';
+	}
+	const x = _domain[1] - _domain[0];
+	let hour = Math.floor(value / 60);
+	let min = value % 60;
+	hour = Utils.addZero(hour);
+	min = Utils.addZero(min);
+	if (Math.ceil(x / 60) > 8) {
+		return `${hour}`;
+	}
+	return `${hour}:${min}`;
+};
 
-	// TODO 根据作用域 生成不同的格式函数
-	xTickFormat = (value, index, data) => {
-		if (Math.floor(value) !== value) {
-			return '';
-		}
-		const x = this._domain[1] - this._domain[0];
-		let hour = Math.floor(value / 60);
-		let min = value % 60;
-		hour = Utils.addZero(hour);
-		min = Utils.addZero(min);
-		if (Math.ceil(x / 60) > 8) {
-			return `${hour}`;
-		}
-		return `${hour}:${min}`;
-	};
+// TODO 根据作用域 显示不同的值
+const _tickValues = () => {
+	const x = _domain[1] - _domain[0];
+	const count = Math.ceil(x / 60);
+	if (count > 12) {
+		return _.range(0, 1441, 120);
+	} else if (count > 6) {
+		return _.range(0, 1441, 60);
+	} else if (x < 40) {
+		let [start, end] = _domain;
+		start += 5 - (start % 5);
+		return _.range(start, end + 1, 5);
+	}
+	return undefined;
+};
 
-	render() {
-		const { bootstrap } = this.state;
-		if (!bootstrap) {
-			return null;
-		}
-		if (bootstrap.message) {
-			return <Text>{bootstrap.message}</Text>;
-		}
+/* ZoomChart */
+export default (ZoomChart = (props) => {
+	let locationX;
+	// initial
+	const [bootstrap, setBootstrap] = useState(false);
+	useEffect(() => {
+		(async () => {
+			const { data } = await API.getZoomChartData();
+			_data = data;
+			locationX = 0;
+			setBootstrap(true);
+		})();
+	}, []);
 
-		const { lineColor, lineStroke, minimumZoom } = this.props;
-		const { xDomain, yDomain } = this.getDomain(this._data, minimumZoom);
-		this._domain = xDomain;
+	if (!bootstrap) {
+		return null;
+	}
+	if (bootstrap.message) {
+		return <Text>{bootstrap.message}</Text>;
+	}
 
-		return (
-			<VictoryChart
-				minDomain={{ x: 0 }}
-				maxDomain={{ x: 1440 }}
-				containerComponent={
-					<VictoryZoomContainer
-						zoomDimension="x"
-						onZoomDomainChange={this.handleDomainChange}
-						zoomDomain={{ x: xDomain, y: yDomain }}
-						minimumZoom={minimumZoom}
-						clipContainerComponent={
-							<VictoryClipContainer
-								clipPadding={{ top: 10, right: 10, bottom: 10, left: 10 }}
-							/>
-						}
-						onTouchStart={(evt) => {
-							this.locationX = evt.nativeEvent.locationX;
-						}}
-					/>
-				}
-			>
-				<LinearGradient />
-				<AxisWrapper tickValues={this._tickValues}>
-					<VictoryAxis
-						axisComponent={<LineSegment lineComponent={<NoopComponent />} />}
-						tickFormat={this.xTickFormat}
-						style={{
-							grid: {
-								stroke: 'gray',
-								strokeDasharray: '5 5',
-							},
-						}}
-					/>
-				</AxisWrapper>
+	const { lineColor, lineStroke, minimumZoom } = props;
+	const { xDomain, yDomain } = getDomain(_data, minimumZoom);
+	_domain = xDomain;
+
+	return (
+		<VictoryChart
+			minDomain={{ x: 0 }}
+			maxDomain={{ x: 1440 }}
+			containerComponent={
+				<VictoryZoomContainer
+					zoomDimension="x"
+					onZoomDomainChange={(domain, props) => {
+						_domain = domain.x;
+					}}
+					zoomDomain={{ x: xDomain, y: yDomain }}
+					minimumZoom={minimumZoom}
+					clipContainerComponent={
+						<VictoryClipContainer
+							clipPadding={{ top: 10, right: 10, bottom: 10, left: 10 }}
+						/>
+					}
+					onTouchStart={(evt) => {
+						locationX = evt.nativeEvent.locationX;
+					}}
+				/>
+			}
+		>
+			<LinearGradient />
+			<AxisWrapper tickValues={_tickValues}>
 				<VictoryAxis
-					dependentAxis
 					axisComponent={<LineSegment lineComponent={<NoopComponent />} />}
+					tickFormat={_xTickFormat}
 					style={{
 						grid: {
 							stroke: 'gray',
@@ -167,26 +163,48 @@ export default class ZoomChart extends React.Component {
 						},
 					}}
 				/>
-				<VictoryArea
-					data={this._data}
-					interpolation="monotoneX"
-					style={{
-						data: {
-							stroke: lineColor,
-							strokeWidth: lineStroke,
-							fill: LinearGradient.fill,
-						},
-					}}
-				/>
-				<VictoryScatter
-					data={this._data}
-					style={{ data: { stroke: lineColor, fill: lineColor } }}
-				/>
-				<Lollipop getParent={() => this} />
-			</VictoryChart>
-		);
-	}
-}
+			</AxisWrapper>
+			<VictoryAxis
+				dependentAxis
+				axisComponent={<LineSegment lineComponent={<NoopComponent />} />}
+				style={{
+					grid: {
+						stroke: 'gray',
+						strokeDasharray: '5 5',
+					},
+				}}
+			/>
+			<VictoryArea
+				data={_data}
+				interpolation="monotoneX"
+				style={{
+					data: {
+						stroke: lineColor,
+						strokeWidth: lineStroke,
+						fill: LinearGradient.fill,
+					},
+				}}
+			/>
+			<VictoryScatter
+				data={_data}
+				style={{ data: { stroke: lineColor, fill: lineColor } }}
+			/>
+			<Lollipop
+				getParent={() => ({
+					locationX,
+					_data,
+				})}
+			/>
+		</VictoryChart>
+	);
+});
+
+// TODO 原来一些内部方法依旧变量会挂载在 this下面。现在需要设置一个 _ 的变量去处理，而且无法继承
+ZoomChart.defaultProps = {
+	lineColor: '#c43a31',
+	lineStroke: 2,
+	minimumZoom: { x: 5, y: 1 },
+};
 
 /*
   最终这里的 animate 是通过 VictoryTransition 进行克隆包裹实现的
